@@ -8,6 +8,7 @@
 var username=""; // Username to access Homeseer 2
 var password=""; // Password to access Homeseer 2
 var hsserver=""; // DNS Name or IP address of HomeSeer server
+var hsport="";   // Port the HomeSeer server is listening on
 
 var auth = 'Basic ' + new Buffer(username + ':' + password).toString('base64');
 
@@ -227,7 +228,7 @@ function getHSDevices(filter,cbfunc){
     var options = {
         hostname: hsserver,
         path: '/jsonapi.asp?action=getdevices&filter='+filter+'&verbose=yes',
-        port: 8000,
+        port: hsport,
         headers: {
             'Authorization': auth
         }
@@ -249,7 +250,7 @@ function controlHSDevice(device,action,value,cbfunc){
     var options = {
         hostname: hsserver,
         path: '/jsonapi.asp?action=' + action + '&id=' + device + '&value=' + value,
-        port: 8000,
+        port: hsport,
         headers: {
             'Authorization': auth
         }
