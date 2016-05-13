@@ -29,17 +29,17 @@ exports.handler = function(event, context) {
 
     switch (event.header.namespace) {
 
-        case 'Discovery':
+        case 'Alexa.ConnectedHome.Discovery':
             handleDiscovery(event, context);
-        break;
+            break;
 
-        case 'Control':
+        case 'Alexa.ConnectedHome.Control':
             handleControl(event, context);
-        break;
+            break;
 
-        case 'System':
+        case 'Alexa.ConnectedHome.System':
             handleSystem(event, context);
-        break;
+            break;
 
 		/**
 		 * We received an unexpected message
@@ -48,7 +48,7 @@ exports.handler = function(event, context) {
             // Warning! Logging this in production might be a security problem.
             log('Err', 'No supported namespace: ' + event.header.namespace);
             context.fail('Something went wrong');
-        break;
+            break;
     }
 };
 
@@ -61,9 +61,10 @@ function handleDiscovery(event, context) {
     var devicetype = 'Insteon';
 
     var headers = {
-        namespace: 'Discovery',
-        name: 'DiscoverAppliancesResponse',
-        payloadVersion: '1'
+        messageID: event.header.messageId,
+        namespace: event.header.namespace,
+        name: event.header.name.replace("Request","Response"),
+        payloadVersion: '2'
     };
 
     var appliances = [];
@@ -73,16 +74,23 @@ function handleDiscovery(event, context) {
         // Loop through the devices and populate applicances
         for(var i=0;i<devices.length;i++){
             var device = devices[i];
-        
+
+            var devactions = ["turnOn", "turnOff"];
+
+            if (device.dimmable) {
+                devactions.push("setPercentage","incrementPercentage","decrementPercentage");
+            }
+
             var applianceDiscovered = {
+                actions: devactions,
+                additionalApplianceDetails: {},
                 applianceId: device.id,
                 manufacturerName: devicetype,
                 modelName: device.type,
                 version: "1",
                 friendlyName: device.name,
                 friendlyDescription: device.name+" located in "+device.room,
-                isReachable: true,
-                additionalApplianceDetails: {}
+                isReachable: true
             };
             appliances.push(applianceDiscovered);
         }
@@ -112,19 +120,24 @@ function handleDiscovery(event, context) {
 function handleControl(event, context) {
 
     var headers = {
+        messageID: event.header.messageId,
         namespace: event.header.namespace,
         name: event.header.name.replace("Request","Response"),
-        payloadVersion: '1'
+        payloadVersion: '2'
     };
-    var payloads = {
-        success: true
-    };
+    var payloads = {};
     var result = {
         header: headers,
         payload: payloads
     };
 
-    if (event.header.namespace !== 'Control' || !(event.header.name == 'SwitchOnOffRequest' || event.header.name == 'AdjustNumericalSettingRequest') ) {
+    if (event.header.namespace !== 'Alexa.ConnectedHome.Control' ||
+            !(event.header.name == 'TurnOnRequest' ||
+              event.header.name == 'TurnOffRequest' ||
+              event.header.name == 'SetPercentageRequest' ||
+              event.header.name == 'IncrementPercentageRequest' ||
+              event.header.name == 'DecrementPercentageRequest'
+              ) ) {
         context.fail(generateControlError(event.header.name.replace("Request","Response"), 'UNSUPPORTED_OPERATION', 'Unrecognized operation'));
     }
 
@@ -135,61 +148,59 @@ function handleControl(event, context) {
         context.fail(generateControlError(event.header.name.replace("Request","Response"), 'UNEXPECTED_INFORMATION_RECEIVED', 'Input is invalid'));
     }
 
-    if (event.header.name === 'SwitchOnOffRequest') {
-        if (event.payload.switchControlAction === 'TURN_ON') {
+    switch (event.header.name) {
+        case 'TurnOnRequest':
             controlHSDevice(applianceId,'deviceon',100,function(response){
                 if(response.error){
-                    //context.fail(generateControlError("SwitchOnOffResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
-                    context.succeed(generateControlError("SwitchOnOffResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                    context.succeed(generateControlError("TurnOnResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
-            })
-        } else if (event.payload.switchControlAction === "TURN_OFF") {
+            });
+            break;
+        case 'TurnOffRequest':
             controlHSDevice(applianceId,'deviceoff',0,function(response){
                 if(response.error){
-                    //context.fail(generateControlError("SwitchOnOffResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
-                    context.succeed(generateControlError("SwitchOnOffResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                    context.succeed(generateControlError("TurnOffResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
-            })
-        }
-    } else if (event.header.name === 'AdjustNumericalSettingRequest') {
-
-        switch (event.payload.adjustmentType) {
-            case 'ABSOLUTE':
-                controlHSDevice(applianceId,'setdevicevalue',event.payload.adjustmentValue,function(response){
-                    if(response.error){
-                        log('response', response.error);
-                        //context.fail(generateControlError("AdjustNumericalSettingResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
-                        context.succeed(generateControlError("AdjustNumericalSettingResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
-                    } else {
-                        context.succeed(result);
-                    }
-                })
+            });
             break;
-
-            case 'RELATIVE':
-                controlHSDevice(applianceId,'changedevicevalue',event.payload.adjustmentValue,function(response){
-                    if(response.error){
-                        log('response', response.error);
-                        //context.fail(generateControlError("AdjustNumericalSettingResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
-                        context.succeed(generateControlError("AdjustNumericalSettingResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
-                    } else {
-                        context.succeed(result);
-                    }
-                })
+        case 'SetPercentageRequest':
+            controlHSDevice(applianceId,'setdevicevalue',event.payload.percentageState.value,function(response){
+                if(response.error){
+                    log('response', response.error);
+                    context.succeed(generateControlError("SetPercentageResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                } else {
+                    context.succeed(result);
+                }
+            });
             break;
-
-    		/**
-	    	 * We received an unexpected type
-		     */
-            default:
-                log('Err', 'No supported namespace: ' + event.header.namespace);
-                context.fail('Something went wrong');
+        case 'IncrementPercentageRequest':
+            controlHSDevice(applianceId,'changedevicevalue',event.payload.deltaPercentage.value,function(response){
+                if(response.error){
+                    log('response', response.error);
+                    context.succeed(generateControlError("IncrementPercentageResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                } else {
+                    context.succeed(result);
+                }
+            });
             break;
-        }
+        case 'DecrementPercentageRequest':
+            controlHSDevice(applianceId,'changedevicevalue',-event.payload.deltaPercentage.value,function(response){
+                if(response.error){
+                    log('response', response.error);
+                    context.succeed(generateControlError("DecrementPercentageResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                } else {
+                    context.succeed(result);
+                }
+            });
+            break;
+        default:
+            log('Err', 'No supported action: ' + event.header.name);
+            context.fail('Something went wrong');
+            break;
     }
 }
 
@@ -198,24 +209,33 @@ function handleControl(event, context) {
  * This is called when Amazon wants to check for connectivity
  */
 function handleSystem(event, context) {
-    if(event.header.name=="HealthCheckRequest"){
-        // TODO: Add call to HSAPI to test for connectivity
-                
-        var headers = {
-            namespace: 'System',
-            name: 'HealthCheckResponse',
-            payloadVersion: '1'
-        };
-        var payloads = {
-            "isHealthy": true,
-            "description": "The system is currently healthy"
-        };
-        var result = {
-            header: headers,
-            payload: payloads
-        };
+    var headers = {
+        messageID: event.header.messageId,
+        namespace: event.header.namespace,
+        name: event.header.name.replace("Request","Response"),
+        payloadVersion: '2'
+    };
 
-        context.succeed(result);
+    switch (event.header.name) {
+
+        case "HealthCheckRequest":
+
+            // TODO: Add call to HSAPI to test for connectivity
+
+            var payloads = {
+                "isHealthy": true,
+                "description": "The system is currently healthy"
+            };
+            var result = {
+                header: headers,
+                payload: payloads
+            };
+            context.succeed(result);
+            break;
+        default:
+            log('Err', 'No supported action: ' + event.header.name);
+            context.fail('Something went wrong');
+            break;
     }
 }
 
@@ -261,7 +281,7 @@ function controlHSDevice(device,action,value,cbfunc){
         response.on('data', function(d) {body += d;});
         response.on('end', function() {cbfunc(JSON.parse(body));});
 	    response.on("error",function(e){log("Got error: " + e.message); });
-    });    
+    });
 }
 
 /**
