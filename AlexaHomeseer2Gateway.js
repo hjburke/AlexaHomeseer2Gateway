@@ -1,9 +1,10 @@
 /**
-    Copyright 2014-2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-    Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
-        http://aws.amazon.com/apache2.0/
-    or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-*/
+ * Amazon Echo Smart Home Skill to control HomeSeer 2 home automation controller.
+ * 
+ * This is intended to be run as an AWS Lambda function.
+ * 
+ * Copyright 2016 hburke
+ */
 
 var username=""; // Username to access Homeseer 2
 var password=""; // Password to access Homeseer 2
@@ -12,14 +13,10 @@ var hsport="";   // Port the HomeSeer server is listening on
 
 var auth = 'Basic ' + new Buffer(username + ':' + password).toString('base64');
 
-var https = require('https');
 var http = require('http');
 
 var log = log;
 var generateControlError = generateControlError;
-
-var PK_Device="";  // if you want to use a specific device, enter it's device ID here
-var Server_Device="";
 
 /**
  * Main entry point.
@@ -53,7 +50,7 @@ exports.handler = function(event, context) {
 };
 
 /**
- * This method is invoked when we receive a "Discovery" message from Alexa Connected Home Skill.
+ * This method is invoked when we receive a "Discovery" message from Alexa Smart Home Skill.
  * We are expected to respond back with a list of appliances that we have discovered for a given
  * customer.
  */
@@ -63,7 +60,7 @@ function handleDiscovery(event, context) {
     var headers = {
         messageID: event.header.messageId,
         namespace: event.header.namespace,
-        name: event.header.name.replace("Request","Response"),
+        name: event.header.name.replace("Request","Confirmation"),
         payloadVersion: '2'
     };
 
@@ -74,13 +71,13 @@ function handleDiscovery(event, context) {
         // Loop through the devices and populate applicances
         for(var i=0;i<devices.length;i++){
             var device = devices[i];
-
+        
             var devactions = ["turnOn", "turnOff"];
-
+        
             if (device.dimmable) {
                 devactions.push("setPercentage","incrementPercentage","decrementPercentage");
             }
-
+        
             var applianceDiscovered = {
                 actions: devactions,
                 additionalApplianceDetails: {},
@@ -119,10 +116,13 @@ function handleDiscovery(event, context) {
  */
 function handleControl(event, context) {
 
+    /**
+     * Create the response header for success
+     */
     var headers = {
         messageID: event.header.messageId,
         namespace: event.header.namespace,
-        name: event.header.name.replace("Request","Response"),
+        name: event.header.name.replace("Request","Confirmation"),
         payloadVersion: '2'
     };
     var payloads = {};
@@ -130,10 +130,10 @@ function handleControl(event, context) {
         header: headers,
         payload: payloads
     };
-
-    if (event.header.namespace !== 'Alexa.ConnectedHome.Control' ||
+        
+    if (event.header.namespace !== 'Alexa.ConnectedHome.Control' || 
             !(event.header.name == 'TurnOnRequest' ||
-              event.header.name == 'TurnOffRequest' ||
+              event.header.name == 'TurnOffRequest' || 
               event.header.name == 'SetPercentageRequest' ||
               event.header.name == 'IncrementPercentageRequest' ||
               event.header.name == 'DecrementPercentageRequest'
@@ -151,8 +151,8 @@ function handleControl(event, context) {
     switch (event.header.name) {
         case 'TurnOnRequest':
             controlHSDevice(applianceId,'deviceon',100,function(response){
-                if(response.error){
-                    context.succeed(generateControlError("TurnOnResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                if (response.error) {
+                    context.succeed(generateControlError("TargetHardwareMalfunctionError", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
@@ -160,8 +160,8 @@ function handleControl(event, context) {
             break;
         case 'TurnOffRequest':
             controlHSDevice(applianceId,'deviceoff',0,function(response){
-                if(response.error){
-                    context.succeed(generateControlError("TurnOffResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                if (response.error) {
+                    context.succeed(generateControlError("TargetHardwareMalfunctionError", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
@@ -169,9 +169,9 @@ function handleControl(event, context) {
             break;
         case 'SetPercentageRequest':
             controlHSDevice(applianceId,'setdevicevalue',event.payload.percentageState.value,function(response){
-                if(response.error){
+                if (response.error) {
                     log('response', response.error);
-                    context.succeed(generateControlError("SetPercentageResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                    context.succeed(generateControlError("TargetHardwareMalfunctionError", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
@@ -179,9 +179,9 @@ function handleControl(event, context) {
             break;
         case 'IncrementPercentageRequest':
             controlHSDevice(applianceId,'changedevicevalue',event.payload.deltaPercentage.value,function(response){
-                if(response.error){
+                if (response.error) {
                     log('response', response.error);
-                    context.succeed(generateControlError("IncrementPercentageResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                    context.succeed(generateControlError("TargetHardwareMalfunctionError", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
@@ -189,9 +189,9 @@ function handleControl(event, context) {
             break;
         case 'DecrementPercentageRequest':
             controlHSDevice(applianceId,'changedevicevalue',-event.payload.deltaPercentage.value,function(response){
-                if(response.error){
+                if (response.error) {
                     log('response', response.error);
-                    context.succeed(generateControlError("DecrementPercentageResponse", 'TARGET_HARDWARE_MALFUNCTION', response.error));
+                    context.succeed(generateControlError("TargetHardwareMalfunctionError", 'TARGET_HARDWARE_MALFUNCTION', response.error));
                 } else {
                     context.succeed(result);
                 }
@@ -215,13 +215,13 @@ function handleSystem(event, context) {
         name: event.header.name.replace("Request","Response"),
         payloadVersion: '2'
     };
-
+    
     switch (event.header.name) {
-
+    
         case "HealthCheckRequest":
-
+            
             // TODO: Add call to HSAPI to test for connectivity
-
+                
             var payloads = {
                 "isHealthy": true,
                 "description": "The system is currently healthy"
@@ -281,19 +281,12 @@ function controlHSDevice(device,action,value,cbfunc){
         response.on('data', function(d) {body += d;});
         response.on('end', function() {cbfunc(JSON.parse(body));});
 	    response.on("error",function(e){log("Got error: " + e.message); });
-    });
+    });    
 }
 
 /**
  * Utility functions.
  */
-function parseJson(jsonMessage,requestType){
-    try {
-        return JSON.parse(jsonMessage);
-    } catch (ex)
-    {log("Parsing Error","error parsing JSON message of type "+requestType+": "+jsonMessage);}
-}
-
 function log(title, msg) {
     console.log('*************** ' + title + ' *************');
     console.log(msg);
@@ -302,9 +295,9 @@ function log(title, msg) {
 
 function generateControlError(name, code, description) {
     var headers = {
-        namespace: 'Control',
+        namespace: 'Alexa.ConnectedHome.Control',
         name: name,
-        payloadVersion: '1'
+        payloadVersion: '2'
     };
 
     var payload = {
