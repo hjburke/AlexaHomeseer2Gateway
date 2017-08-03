@@ -23,6 +23,7 @@ var generateControlError = generateControlError;
  * Incoming events from Alexa Lighting APIs are processed via this method.
  */
 exports.handler = function(event, context) {
+            log('Request', event);
 
     switch (event.header.namespace) {
 
@@ -60,7 +61,7 @@ function handleDiscovery(event, context) {
     var headers = {
         messageID: event.header.messageId,
         namespace: event.header.namespace,
-        name: event.header.name.replace("Request","Confirmation"),
+        name: event.header.name.replace("Request","Response"),
         payloadVersion: '2'
     };
 
@@ -104,7 +105,7 @@ function handleDiscovery(event, context) {
         };
 
         // Warning! Logging this in production might be a security problem.
-        //log('Discovery', JSON.stringify(result));
+        log('Discovery', JSON.stringify(result));
 
         context.succeed(result);
     });
