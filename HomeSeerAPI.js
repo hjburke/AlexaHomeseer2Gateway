@@ -1,17 +1,17 @@
 /**
  * API to control HomeSeer 2 home automation controller.
- * 
+ *
  * This is intended to be run as an AWS Lambda function.
- * 
+ *
  * Copyright 2016 hburke
  */
 
 'use strict';
 
-var username=""; // Username to access Homeseer 2
-var password=""; // Password to access Homeseer 2
-var hsserver=""; // DNS Name or IP address of HomeSeer server
-var hsport="";   // Port the HomeSeer server is listening on
+var username=process.env.username;
+var password=process.env.password;
+var hsserver=process.env.hsserver;
+var hsport  =process.env.hsport;
 
 var auth = 'Basic ' + new Buffer(username + ':' + password).toString('base64');
 
